@@ -106,7 +106,8 @@ def move_player(telegram_id: int, direction: str, conn: sqlite3.Connection) -> d
     if player is None:
         raise ValueError("not_found")
 
-    # А если ещё перемещается?
+    if _is_moving(player["moving_until"]):
+        raise ValueError("still_moving")
 
     dx, dy = DIRECTIONS[direction]
     new_x = player["cell_x"] + dx
@@ -151,3 +152,36 @@ def move_player(telegram_id: int, direction: str, conn: sqlite3.Connection) -> d
         "coins_collected": new_coins,
         "coin_picked": coin_picked,
     }
+
+def get_game_state(conn) -> dict[str, Any]:
+    """Возвращает полное состояние игры для клиента."""
+    players = []
+    rows = conn.execute("SELECT * FROM players").fetchall()
+    for row in rows:
+        players.append(
+            {
+                "telegram_id": row["telegram_id"],
+                "username": row["username"],
+                "cell_x": row["cell_x"],
+                "cell_y": row["cell_y"],
+                "coins_collected": row["coins_collected"],
+                "is_moving": _is_moving(row["moving_until"]),
+            }
+        )
+
+    coin_row = conn.execute("SELECT coin_x, coin_y FROM game_state WHERE id = 1").fetchone()
+    if coin_row is None:
+        coin = {"cell_x": 0, "cell_y": 0}
+    else:
+        coin = {"cell_x": coin_row["coin_x"], "cell_y": coin_row["coin_y"]}
+
+    return {
+        "grid_size": GRID_SIZE,
+        "cell_size": 32,
+        "players": players,
+        "coin": coin,
+    }
+
+def _is_moving(moving_until: float) -> bool:
+    """Проверяет, движется ли кот по данным сервера."""
+    return time.time() < moving_until
