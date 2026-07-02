@@ -1,8 +1,7 @@
 import random
 import sqlite3
 import time
-from typing import Any, Optional, Set, Tuple
-
+from typing import Any, Set, Tuple
 
 GRID_SIZE = 32
 MOVE_DURATION_SEC = 0.8
@@ -13,7 +12,12 @@ DIRECTIONS = {
     "left": (-1, 0),
     "right": (1, 0),
 }
-def random_free_cell(extra_occupied = None, conn = None, ) -> Tuple[int, int]:
+
+
+def random_free_cell(
+    extra_occupied=None,
+    conn=None,
+) -> Tuple[int, int]:
     """
     Возвращает случайную свободную клетку на поле.
 
@@ -26,7 +30,7 @@ def random_free_cell(extra_occupied = None, conn = None, ) -> Tuple[int, int]:
 
     # 2. Добавляем клетку с монеткой
     if extra_occupied:
-        occupied.add(extra_occupied)
+        occupied.update(extra_occupied)
 
     # 3. Создаём список всех свободных клеток
     all_cells = [(x, y) for x in range(GRID_SIZE) for y in range(GRID_SIZE)]
@@ -39,17 +43,23 @@ def random_free_cell(extra_occupied = None, conn = None, ) -> Tuple[int, int]:
     # 5. Выбираем случайную клетку
     return random.choice(free_cells)
 
-def get_occupied_cells(conn, exclude_id = None) -> Set[Tuple[int, int]]:
+
+def get_occupied_cells(conn, exclude_id=None) -> Set[Tuple[int, int]]:
     """Собирает клетки, занятые котами."""
     occupied = set()
-    rows = conn.execute("SELECT telegram_id, cell_x, cell_y FROM players").fetchall()
+    rows = conn.execute(
+        "SELECT telegram_id, cell_x, cell_y FROM players"
+    ).fetchall()
     for row in rows:
         if exclude_id is not None and row["telegram_id"] == exclude_id:
             continue
         occupied.add((row["cell_x"], row["cell_y"]))
     return occupied
 
-def join_player(telegram_id: int, username: str, conn: sqlite3.Connection) -> dict[str, Any]:
+
+def join_player(
+    telegram_id: int, username: str, conn: sqlite3.Connection
+) -> dict[str, Any]:
     """
     Регистрирует игрока или возвращает существующего.
 
@@ -67,7 +77,9 @@ def join_player(telegram_id: int, username: str, conn: sqlite3.Connection) -> di
             "cell_y": existing["cell_y"],
         }
 
-    coin_row = conn.execute("SELECT coin_x, coin_y FROM game_state WHERE id = 1").fetchone()
+    coin_row = conn.execute(
+        "SELECT coin_x, coin_y FROM game_state WHERE id = 1"
+    ).fetchone()
 
     extra = set()
     if coin_row is not None:
@@ -90,7 +102,10 @@ def join_player(telegram_id: int, username: str, conn: sqlite3.Connection) -> di
         "cell_y": cell_y,
     }
 
-def move_player(telegram_id: int, direction: str, conn: sqlite3.Connection) -> dict[str, Any]:
+
+def move_player(
+    telegram_id: int, direction: str, conn: sqlite3.Connection
+) -> dict[str, Any]:
     """
     Перемещает кота на одну клетку.
 
@@ -120,8 +135,14 @@ def move_player(telegram_id: int, direction: str, conn: sqlite3.Connection) -> d
     if (new_x, new_y) in occupied:
         raise ValueError("cell_occupied")
 
-    coin_row = conn.execute("SELECT coin_x, coin_y FROM game_state WHERE id = 1").fetchone()
-    coin_picked = coin_row["coin_x"] == new_x and coin_row["coin_y"] == new_y
+    coin_row = conn.execute(
+        "SELECT coin_x, coin_y FROM game_state WHERE id = 1"
+    ).fetchone()
+    coin_picked = (
+        coin_row is not None
+        and coin_row["coin_x"] == new_x
+        and coin_row["coin_y"] == new_y
+    )
     new_coins = player["coins_collected"] + (1 if coin_picked else 0)
     moving_until = time.time() + MOVE_DURATION_SEC
 
@@ -137,7 +158,7 @@ def move_player(telegram_id: int, direction: str, conn: sqlite3.Connection) -> d
     if coin_picked:
         try:
             coin_x, coin_y = random_free_cell(conn=conn)
-        except ValueError:
+        except RuntimeError:
             coin_x, coin_y = 0, 0
         conn.execute(
             "UPDATE game_state SET coin_x = ?, coin_y = ? WHERE id = 1",
@@ -152,6 +173,7 @@ def move_player(telegram_id: int, direction: str, conn: sqlite3.Connection) -> d
         "coins_collected": new_coins,
         "coin_picked": coin_picked,
     }
+
 
 def get_game_state(conn) -> dict[str, Any]:
     """Возвращает полное состояние игры для клиента."""
@@ -169,7 +191,9 @@ def get_game_state(conn) -> dict[str, Any]:
             }
         )
 
-    coin_row = conn.execute("SELECT coin_x, coin_y FROM game_state WHERE id = 1").fetchone()
+    coin_row = conn.execute(
+        "SELECT coin_x, coin_y FROM game_state WHERE id = 1"
+    ).fetchone()
     if coin_row is None:
         coin = {"cell_x": 0, "cell_y": 0}
     else:
@@ -182,6 +206,24 @@ def get_game_state(conn) -> dict[str, Any]:
         "coin": coin,
     }
 
+
 def _is_moving(moving_until: float) -> bool:
     """Проверяет, движется ли кот по данным сервера."""
     return time.time() < moving_until
+
+
+def leaderboard(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    """Возвращает таблицу лидеров: имя, время в игре, монеты."""
+    rows = conn.execute(
+        "SELECT username, joined_at, coins_collected FROM players "
+        "ORDER BY coins_collected DESC"
+    ).fetchall()
+    now = time.time()
+    return [
+        {
+            "username": row["username"],
+            "sec": int(now - row["joined_at"]),
+            "coins": row["coins_collected"],
+        }
+        for row in rows
+    ]

@@ -1,0 +1,4 @@
+CELL = 32
+SIZE = 32
+W = CELL * SIZE
+SERVER = "http://127.0.0.1:5000"

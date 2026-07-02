@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Leaderboard</title></head>
+<body>
+<h1>Leaderboard</h1>
+<table border="1">
+<tr><th>Name</th><th>Time (sec)</th><th>Coins</th></tr>
+{% for r in rows %}
+<tr><td>{{ r.username }}</td><td>{{ r.sec }}</td><td>{{ r.coins }}</td></tr>
+{% endfor %}
+</table>
+</body></html>
